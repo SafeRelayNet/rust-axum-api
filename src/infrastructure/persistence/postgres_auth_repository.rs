@@ -16,6 +16,17 @@ impl PostgresAuthRepository {
     pub fn new(database_service: DatabaseService) -> Self {
         Self { database_service }
     }
+
+    fn map_sqlx_error(error: sqlx::Error) -> DomainError {
+        match error {
+            sqlx::Error::Database(database_error)
+                if database_error.code().as_deref() == Some("23505") =>
+            {
+                DomainError::Conflict("email already registered".to_string())
+            }
+            _ => DomainError::Persistence("database operation failed".to_string()),
+        }
+    }
 }
 
 #[async_trait]
@@ -40,14 +51,7 @@ impl UserRepository for PostgresAuthRepository {
         .bind(password_hash_owned)
         .fetch_one(pool)
         .await
-        .map_err(|error: sqlx::Error| match error {
-            sqlx::Error::Database(database_error)
-                if database_error.code().as_deref() == Some("23505") =>
-            {
-                DomainError::Conflict("email already registered".to_string())
-            }
-            _ => DomainError::Persistence(error.to_string()),
-        })?;
+        .map_err(Self::map_sqlx_error)?;
 
         let user_id: Uuid = row.get::<Uuid, _>("id");
         Ok(user_id)
@@ -70,7 +74,7 @@ impl UserRepository for PostgresAuthRepository {
         .bind(email_owned)
         .fetch_optional(pool)
         .await
-        .map_err(|error: sqlx::Error| DomainError::Persistence(error.to_string()))?;
+        .map_err(Self::map_sqlx_error)?;
 
         let mapped_user: Option<UserAuth> = row.map(|row_value: sqlx::postgres::PgRow| UserAuth {
             id: row_value.get::<Uuid, _>("id"),

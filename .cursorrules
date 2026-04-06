@@ -37,3 +37,23 @@ The Domain logic must be **100% independent** of frameworks and external tools. 
 ## 6. Error Handling Philosophy
 - **Domain-Driven Errors:** Use `thiserror` to define granular enums in the `domain` layer.
 - **Mapping:** In the `infrastructure` layer, catch external errors (like `sqlx::Error`) and map them immediately into `domain` errors.
+
+## 7. Strict Port Hermiticity
+- **No Leaky Abstractions:** The file `src/domain/ports.rs` must NEVER import external crates like `sqlx`, `redis`, `axum`, or `anyhow`. 
+- **Types Only:** Use only primitive Rust types, domain entities, or the `DomainError` enum. 
+- **Error Mapping:** Ports must return `Result<T, DomainError>`. Any infrastructure-specific error MUST be converted inside the Adapter before crossing the boundary.
+
+## 8. Dependency Injection (DI) Pattern
+- **Constructor Injection:** UseCases in `src/application/` must not instantiate concrete repositories (e.g., `PostgresAuthRepository::new()`).
+- **Trait-Based Services:** UseCases must receive dependencies as `Arc<dyn Trait>` in their `new` constructor.
+    - *Example:* `pub fn new(repo: Arc<dyn UserRepository>) -> Self`.
+- **Wiring:** All "wiring" of concrete adapters into use cases must happen exclusively in `src/infrastructure/state.rs` or the main entry point.
+
+## 9. Zero-Panic Policy (SaaS Gateway Resilience)
+- **Panic-Free Infrastructure:** Since this is a Gateway, it must never crash. Strictly forbid `unwrap()` or `panic!` in `src/infrastructure/cache/` or `src/infrastructure/persistence/`.
+- **Graceful Degradation:** If Redis or Postgres is down, the adapter must return `DomainError::Persistence`. The system should handle this via the Axum error handler to return a 530 (Service Unavailable) or 500, not a process crash.
+
+## 10. Explicit Variable Context
+- **Explicit Typing in Handlers:** In `src/infrastructure/web/`, always type the result of use case calls to ensure clarity.
+    - *Good:* `let user: UserAuth = self.auth_usecase.execute(params).await?;`
+    - *Bad:* `let user = self.auth_usecase.execute(params).await?;`

@@ -4,6 +4,7 @@ use anyhow::Result;
 
 use crate::application::auth_usecase::AuthUseCase;
 use crate::config::environment::EnvironmentVariables;
+use crate::domain::ports::{TokenBlocklistStore, TokenService, UserRepository};
 use crate::infrastructure::cache::redis_session_store::RedisSessionStore;
 use crate::infrastructure::database::{DatabaseService, RedisService};
 use crate::infrastructure::persistence::postgres_auth_repository::PostgresAuthRepository;
@@ -43,20 +44,19 @@ impl AppState {
         let redis: RedisService = RedisService::new(environment_arc.clone())?;
         redis.initialize().await?;
 
-        let auth_repository: Arc<PostgresAuthRepository> =
+        let user_repository_adapter: Arc<dyn UserRepository> =
             Arc::new(PostgresAuthRepository::new(database.clone()));
-
-        let token_blocklist_store: Arc<RedisSessionStore> =
+        let token_blocklist_adapter: Arc<dyn TokenBlocklistStore> =
             Arc::new(RedisSessionStore::new(redis.clone()));
-        let token_service: Arc<JwtTokenService> = Arc::new(JwtTokenService::new(
+        let token_service_adapter: Arc<dyn TokenService> = Arc::new(JwtTokenService::new(
             environment_arc.jwt_secret.to_string(),
             environment_arc.jwt_exp_seconds,
         ));
 
         let auth_usecase: Arc<AuthUseCase> = Arc::new(AuthUseCase::new(
-            auth_repository,
-            token_service,
-            token_blocklist_store,
+            user_repository_adapter,
+            token_service_adapter,
+            token_blocklist_adapter,
         ));
 
         Ok(Self {
