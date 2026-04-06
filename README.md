@@ -25,8 +25,9 @@ This project provides a minimal backend to:
   - supports `listenfd` socket handoff, so you can use `systemfd + cargo-watch` in dev
 - ✅ Strict startup configuration validation:
   - required env vars are validated at boot with actionable error messages
-- ✅ Automatic schema bootstrap:
-  - base PostgreSQL auth schema is initialized on application startup
+- ✅ Standard request input validation at the web adapter boundary:
+  - reusable `ValidatedJson<T>` extractor validates DTOs before use case execution
+  - email format and required fields are enforced with `validator`
 
 ## What it does
 

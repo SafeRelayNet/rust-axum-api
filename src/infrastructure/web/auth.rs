@@ -1,25 +1,31 @@
-use axum::extract::{Json, State};
+use axum::extract::State;
 use axum::http::StatusCode;
 use axum::routing::post;
 use axum::Router;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
+use validator::Validate;
 
 use crate::domain::errors::DomainError;
 use crate::infrastructure::state::AppState;
 use crate::infrastructure::web::error::map_domain_error_to_status;
 use crate::infrastructure::web::response::HandlerResponse;
+use crate::infrastructure::web::validated_json::ValidatedJson;
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct RegisterRequest {
+    #[validate(email(message = "invalid email format"))]
     pub email: String,
+    #[validate(length(min = 8, message = "password must have at least 8 characters"))]
     pub password: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct LoginRequest {
+    #[validate(email(message = "invalid email format"))]
     pub email: String,
+    #[validate(length(min = 1, message = "password cannot be empty"))]
     pub password: String,
 }
 
@@ -28,8 +34,9 @@ pub struct AuthResponse {
     pub token: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct LogoutRequest {
+    #[validate(length(min = 1, message = "token cannot be empty"))]
     pub token: String,
 }
 
@@ -42,7 +49,7 @@ pub fn routes() -> Router<AppState> {
 
 pub async fn register(
     State(state): State<AppState>,
-    Json(payload): Json<RegisterRequest>,
+    ValidatedJson(payload): ValidatedJson<RegisterRequest>,
 ) -> HandlerResponse {
     let result: Result<Uuid, DomainError> = state
         .auth_usecase
@@ -61,7 +68,7 @@ pub async fn register(
 
 pub async fn login(
     State(state): State<AppState>,
-    Json(payload): Json<LoginRequest>,
+    ValidatedJson(payload): ValidatedJson<LoginRequest>,
 ) -> HandlerResponse {
     let result: Result<String, DomainError> = state
         .auth_usecase
@@ -80,7 +87,7 @@ pub async fn login(
 
 pub async fn logout(
     State(state): State<AppState>,
-    Json(payload): Json<LogoutRequest>,
+    ValidatedJson(payload): ValidatedJson<LogoutRequest>,
 ) -> HandlerResponse {
     let result: Result<(), DomainError> = state.auth_usecase.logout(&payload.token).await;
 

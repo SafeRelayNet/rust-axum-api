@@ -4,6 +4,8 @@
 
 -- Ensure UUID generation is available
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- Ensure case-insensitive text type for emails
+CREATE EXTENSION IF NOT EXISTS citext;
 
 -- 1. Helper function
 -- =============================================================================
@@ -23,7 +25,7 @@ $$ language 'plpgsql';
 -- Users table for local credentials auth.
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email VARCHAR NOT NULL UNIQUE,
+    email CITEXT NOT NULL UNIQUE,
     password_hash VARCHAR NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -35,6 +37,9 @@ ALTER TABLE users DISABLE ROW LEVEL SECURITY;
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_tenant_id_email_key;
 ALTER TABLE users DROP COLUMN IF EXISTS tenant_id;
 ALTER TABLE users DROP COLUMN IF EXISTS full_name;
+ALTER TABLE users
+    ALTER COLUMN email TYPE CITEXT
+    USING email::citext;
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique_idx ON users (email);
 
 -- Trigger for users.updated_at
