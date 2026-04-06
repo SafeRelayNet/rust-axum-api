@@ -1,7 +1,7 @@
 # ===========================================
 # Docker Compose - Local Development Database
 # ===========================================
-# Only runs PostgreSQL for local development
+# Runs PostgreSQL and Redis for local development
 # Run the Rust app locally with: systemfd --no-pid -s http::3000 -- cargo watch -x run
 #
 # Usage from project root: docker-compose -f docker/docker-compose.dev.yml up -d
@@ -21,11 +21,31 @@ services:
       # Optional: Add init scripts if needed
       # - ./init-scripts:/docker-entrypoint-initdb.d
     ports:
-      - "${DB_PORT:-5432}:5432"
+      # Host port is controlled by DB_PORT (fallback 5433).
+      # Use `docker compose --env-file .env ...` from project root so interpolation
+      # always reads your root `.env`.
+      - "${DB_PORT:-5433}:5432"
     networks:
       - dev_network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-rust_axum_api}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis for session storage in local development
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_dev_data:/data
+    networks:
+      - dev_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -38,3 +58,5 @@ networks:
 volumes:
   postgres_dev_data:
     driver: local 
+  redis_dev_data:
+    driver: local

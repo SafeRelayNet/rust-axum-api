@@ -22,10 +22,10 @@ axum = "0.8.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-# * Tower is used for layering services (timeouts, error handling, etc.)
-tower = { version = "0.5.2", features = ["util", "timeout"] }
+# * Tower layers for timeout and middleware composition
+tower = { version = "0.5.2", features = ["timeout"] }
 
-# * For collecting axum::body::Body into Bytes
+# * Body size limit error typing used by global error mapper
 http-body-util = "0.1.3"
 
 # * Tracing is used for structured, leveled logs
@@ -43,6 +43,8 @@ dotenv = "0.15"
 
 # * anyhow used for more convenient error handling
 anyhow = "1.0.98"
+thiserror = "1.0.64"
+async-trait = "0.1.83"
 
 once_cell = "1.18.0"
 
@@ -58,9 +60,6 @@ sqlx = { version = "0.8", features = [
 
 # * UUID support
 uuid = { version = "1.17.0", features = ["v4", "serde"] }
-
-# * hostname for instance identification in monitoring
-hostname = "0.4.0"
 
 # * bcrypt for password hashing
 bcrypt = "0.16"

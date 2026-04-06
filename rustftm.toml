@@ -1,0 +1,12 @@
+max_width = 80
+imports_granularity = "Crate"
+force_explicit_abi = true
+reorder_imports = true
+indent_style = "Block"
+indent_width = 4
+blank_lines_upper_bound = 1
+blank_lines_lower_bound = 0
+wrap_comments = true
+wrap_comments_granularity = "Line"
+wrap_comments_width = 80
+wrap_comments_style = "Chat"

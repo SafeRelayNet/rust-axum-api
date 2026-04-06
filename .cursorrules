@@ -1,56 +1,39 @@
-# PROJECT CONTEXT: High-Performance Micro SaaS Refactor (Rust/Axum on GCP)
+# Project Rules for Rust/Axum SaaS Gateway
 
-## 1. Project Goal & Philosophy
-We are refactoring an existing Rust/Axum project. The goal is "Extreme Optimization" and "Simplicity."
-* **Current State (TO BE REMOVED):** The project currently uses outdated patterns like Multi-Schema Postgres tenancy, MongoDB, and Bitbucket Pipelines.
-* **Target State:** A consolidated, high-performance Monolith using a Single Postgres Database with Row Level Security (RLS), deployed on Google Cloud Platform (GCP) via optimized GitHub Actions.
+You are an expert Rust Engineer. You must follow these strict architectural and coding standards for all code generation, refactoring, and logic implementation.
 
-## 2. The Tech Stack
-* **Language:** Rust (Latest Stable/2024).
-* **Web Framework:** Axum (managed by Tokio runtime).
-* **Database Driver:** SQLx (Pure SQL, compile-time checked). **Do not use ORMs**.
-* **Primary Database:** PostgreSQL (GCP Cloud SQL).
-* **Cache/Hot Store:** Redis (GCP Memorystore).
-* **Infrastructure:** Google Cloud Platform (GCP) managed via Terraform (IaC).
-* **Compute:** GCP Cloud Run (Gen 2) with "CPU Boost" enabled.
+## 1. Hexagonal Architecture (The Gold Standard)
+The Domain logic must be **100% independent** of frameworks and external tools. Never allow `axum`, `sqlx`, `diesel`, or any other infrastructure-specific crate to leak into `src/domain/`.
+- **Inward Dependency Rule:** Dependencies must only point inwards. Inner layers cannot import from outer layers.
+- **Layer Definitions:**
+    - `src/domain/`: Pure business logic, entities, and Port (Trait) definitions. ZERO framework dependencies.
+    - `src/application/`: Use cases and business orchestrators.
+    - `src/infrastructure/`: The Adapters. Concrete implementations of Ports (SQLx, API clients) and the Axum web server (handlers, routes, DTOs).
 
-## 3. Architectural Patterns (Strict Adherence Required)
+## 2. Development Workflow & Validation
+- **Post-Modification Check:** After every code change or generation, you must logically verify that the code passes `cargo check` and `cargo fmt`.
+- **Format Consistency:** All generated code must strictly adhere to `cargo fmt` defaults. Do not suggest or implement code that violates standard Rust formatting.
+- **Compilation Integrity:** Always prioritize code that compiles. If a change might break a dependency or a trait implementation, explicitly warn about it or provide the necessary fix.
 
-### A. Database Strategy: Single Schema + RLS
-* **Stop** using one schema per tenant.
-* **Use** a Single Schema approach where every table has a `tenant_id` column.
-* **Security:** Implement Postgres **Row Level Security (RLS)** policies.
-    * The application must NOT manually add `WHERE tenant_id = ...` to every query.
-    * Instead, the AppState must inject the tenant context into the DB session.
+## 3. Coding Style & Type Safety
+- **Explicit Type Annotations:** Always specify the variable type (`let x: Type = ...`), even when Rust's type inference is sufficient. This prevents ambiguity and improves clarity in complex logic.
+- **Explicit Returns:** Use explicit types in function signatures. Prefer clear, readable type definitions over deeply nested generics.
+- **No Lazy Error Handling:** Strictly avoid `unwrap()`. Use `expect("meaningful context")` only in test suites. For production code, use proper error propagation with the `?` operator.
 
-### B. The Request Lifecycle (The "Hot Path")
-1.  **Request In:** User makes a request with a Token/API Key.
-2.  **Middleware (Auth):**
-    * Check **Redis** (GCP Memorystore) first for session/tenant context (Goal: <1ms latency).
-    * If missing, fetch from DB and populate Redis.
-3.  **Tenant Context Setup:**
-    * Before executing business logic, the middleware must set the Postgres session variable:
-    * `SET LOCAL app.current_tenant_id = 'uuid_here';`
-4.  **Execution:** Run the SQLx query. Postgres RLS automatically filters data.
+## 4. Meaningful Documentation
+- **The "Why", not the "How":** Avoid comments that describe what the code is doing (e.g., no `// increments counter`). Code must be self-explanatory.
+- **Strategic Comments:** Only add comments to explain **business logic decisions**, **architectural constraints**, or **non-obvious workarounds**.
+- **Doc-Comments:** Use `///` for all public-facing traits, structs, and functions in the `domain` layer to document business invariants.
 
-### C. Infrastructure (GCP + Terraform)
-* **Networking:** The Rust app (Cloud Run) connects to Postgres (Cloud SQL) via **Unix Sockets** (not TCP) for maximum performance.
-* **IaC:** All resources (Cloud Run, SQL, Redis, Artifact Registry) are defined in Terraform.
+## 5. Ports, Adapters, and Mapping
+- **Traits as Boundaries:** Define all external side effects (DB, Mailers, APIs) as Traits in the domain/application layer.
+- **Dependency Injection:** Use Axum `State` to inject `Arc<dyn Port>` into handlers.
+- **Data Isolation:**
+    - **Entities:** Logic structs in `domain/`.
+    - **DTOs:** Request/Response structs in `infrastructure/web/`.
+    - **Models:** Persistence structs (e.g., with `sqlx::FromRow`) in `infrastructure/persistence/`.
+- **Mandatory Mapping:** Implement `From` or `Into` to convert between layers. Never leak a database row directly to an API response.
 
-## 4. CI/CD & Build Optimization (GitHub Actions)
-* **Platform:** GitHub Actions.
-* **Rust Caching (CRITICAL):**
-    * The pipeline MUST use the action `Swatinem/rust-cache@v2`.
-    * This is mandatory to cache `target/` and `~/.cargo` directories to prevent recompiling all crates on every deploy.
-* **Docker Strategy:**
-    * Use Multi-stage Docker builds (`chef` pattern or standard multi-stage) to minimize image size (`distroless` or `scratch`).
-    * Push images to **Google Artifact Registry**.
-* **Deployment:**
-    * The pipeline should automatically run `terraform apply` or `gcloud run deploy` only after the tests and build pass.
-
-## 5. Coding Standards & Style
-* **Explicit Type Annotations:**
-    * Always explicitly annotate variable types, even when the compiler can infer them (e.g., `let user_id: Uuid = ...` instead of `let user_id = ...`).
-    * This improves readability and clarifies intent.
-
-This is the source of truth. Prioritize performance, strict type safety, and build speed.
+## 6. Error Handling Philosophy
+- **Domain-Driven Errors:** Use `thiserror` to define granular enums in the `domain` layer.
+- **Mapping:** In the `infrastructure` layer, catch external errors (like `sqlx::Error`) and map them immediately into `domain` errors.

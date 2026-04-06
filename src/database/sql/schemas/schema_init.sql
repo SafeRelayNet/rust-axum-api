@@ -1,8 +1,11 @@
 -- =============================================================================
--- SINGLE SCHEMA INITIALIZATION
+-- SIMPLE AUTH SCHEMA INITIALIZATION
 -- =============================================================================
 
--- 1. Helper Functions
+-- Ensure UUID generation is available
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- 1. Helper function
 -- =============================================================================
 
 -- Function to automatically update the updated_at column
@@ -14,48 +17,27 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- 2. Core Tables
+-- 2. Core table
 -- =============================================================================
 
--- Tenants Table
--- The root entity for multi-tenancy.
-CREATE TABLE IF NOT EXISTS tenants (
+-- Users table for local credentials auth.
+CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR NOT NULL,
+    email VARCHAR NOT NULL UNIQUE,
+    password_hash VARCHAR NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Trigger for tenants updated_at
-DROP TRIGGER IF EXISTS update_tenants_updated_at ON tenants;
-CREATE TRIGGER update_tenants_updated_at
-    BEFORE UPDATE ON tenants
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
-
--- Users Table (With RLS)
--- Users belong to a tenant.
-CREATE TABLE IF NOT EXISTS users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL REFERENCES tenants(id),
-    email VARCHAR NOT NULL,
-    password_hash VARCHAR NOT NULL,
-    full_name VARCHAR,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(tenant_id, email)
-);
-
--- Enable RLS on users
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-
--- Create RLS Policy for users
--- Only allow access to rows where tenant_id matches the current session tenant
+-- Backward-compatible cleanup from legacy multi-tenant structure.
 DROP POLICY IF EXISTS tenant_isolation_policy ON users;
-CREATE POLICY tenant_isolation_policy ON users
-    USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
+ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_tenant_id_email_key;
+ALTER TABLE users DROP COLUMN IF EXISTS tenant_id;
+ALTER TABLE users DROP COLUMN IF EXISTS full_name;
+CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique_idx ON users (email);
 
--- Trigger for users updated_at
+-- Trigger for users.updated_at
 DROP TRIGGER IF EXISTS update_users_updated_at ON users;
 CREATE TRIGGER update_users_updated_at
     BEFORE UPDATE ON users

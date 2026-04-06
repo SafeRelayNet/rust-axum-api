@@ -1,25 +1,21 @@
-// Main application entry point
-
 use axum::serve;
 
-use my_axum_project::config::state::AppState;
-use my_axum_project::core::{logging, server};
+use my_axum_project::infrastructure::logging::initialize_tracing;
+use my_axum_project::infrastructure::state::AppState;
+use my_axum_project::infrastructure::web::router;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    logging::init_tracing();
-    
-    // Initialize database with master schema and tenants table
-    AppState::init_master_schema().await?;
-    
-    let app: axum::Router = server::create_app();
-    let listener: tokio::net::TcpListener = server::setup_listener().await?;
+    initialize_tracing();
 
-    println!("Server listening on: {}", listener.local_addr()?);
+    let state: AppState = AppState::build().await?;
+    let app: axum::Router = router::create_app(state.clone());
+    let listener: tokio::net::TcpListener = router::setup_listener(&state).await?;
 
-    // Start server with graceful shutdown handling
+    tracing::info!("Server listening on {}", listener.local_addr()?);
+
     serve(listener, app)
-        .with_graceful_shutdown(server::shutdown_signal())
+        .with_graceful_shutdown(router::shutdown_signal(state))
         .await?;
 
     Ok(())
