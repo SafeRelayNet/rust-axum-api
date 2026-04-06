@@ -78,12 +78,13 @@ pub async fn response_wrapper(
     let (messages, data): (Vec<String>, Value) = extract_response_components(&response);
     let (mut parts, _body): (axum::http::response::Parts, Body) = response.into_parts();
 
-    let status_name: String = parts
-        .status
-        .canonical_reason()
-        .unwrap_or("UNKNOWN_STATUS")
-        .to_uppercase()
-        .replace(' ', "_");
+    let raw_status_reason: &str = match parts.status.canonical_reason() {
+        Some(reason) => reason,
+        None => "UNKNOWN_STATUS",
+    };
+
+    let status_name: String = raw_status_reason.to_uppercase().replace(' ', "_");
+    
     let wrapped: ResponseFormat = ResponseFormat {
         status: status_name,
         code: parts.status.as_u16(),
@@ -92,7 +93,11 @@ pub async fn response_wrapper(
         date: Utc::now().to_rfc3339(),
     };
 
-    let response_body: Vec<u8> = serde_json::to_vec(&wrapped).unwrap_or_else(|_| b"{}".to_vec());
+    let response_body: Vec<u8> = match serde_json::to_vec(&wrapped) {
+        Ok(body) => body,
+        Err(_) => b"{}".to_vec(),
+    };
+
     parts
         .headers
         .insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));

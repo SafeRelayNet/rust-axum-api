@@ -6,7 +6,10 @@ use tracing_subscriber::EnvFilter;
 /// runtime wiring concerns grouped in the composition layer.
 pub fn initialize_tracing() {
     let fallback_filter: EnvFilter = EnvFilter::new("my_axum_project=info,sqlx=warn,axum=warn");
-    let env_filter: EnvFilter = EnvFilter::try_from_default_env().unwrap_or(fallback_filter);
+    let env_filter: EnvFilter = match EnvFilter::try_from_default_env() {
+        Ok(filter) => filter,
+        Err(_) => fallback_filter,
+    };
 
     tracing_subscriber::fmt()
         .with_env_filter(env_filter)
