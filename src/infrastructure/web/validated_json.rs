@@ -40,11 +40,13 @@ where
                         .data(json!({ "error": error.body_text() }))
                 })?;
 
-        payload.validate().map_err(|error: validator::ValidationErrors| {
-            HandlerResponse::new(StatusCode::BAD_REQUEST)
-                .message("Validation failed")
-                .data(json!({ "error": error.to_string() }))
-        })?;
+        payload
+            .validate()
+            .map_err(|error: validator::ValidationErrors| {
+                HandlerResponse::new(StatusCode::BAD_REQUEST)
+                    .message("Validation failed")
+                    .data(json!({ "error": error.to_string() }))
+            })?;
 
         Ok(Self(payload))
     }

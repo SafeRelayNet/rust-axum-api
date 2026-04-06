@@ -1,8 +1,8 @@
 use std::error::Error;
 
 use axum::extract::rejection::MatchedPathRejection;
-use axum::{BoxError, response::IntoResponse};
 use axum::http::StatusCode;
+use axum::{response::IntoResponse, BoxError};
 use http_body_util::LengthLimitError;
 use tower::timeout::error::Elapsed;
 

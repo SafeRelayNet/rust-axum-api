@@ -19,6 +19,8 @@ pub struct EnvironmentVariables {
     pub db_name: Cow<'static, str>,
     pub db_user: Cow<'static, str>,
     pub db_password: Cow<'static, str>,
+    pub jwt_secret: Cow<'static, str>,
+    pub jwt_exp_seconds: u64,
     pub redis_url: Cow<'static, str>,
 }
 
@@ -85,6 +87,9 @@ impl EnvironmentVariables {
             check_var("DB_USER", &mut missing_vars).map(|s: String| Cow::<'static, str>::Owned(s));
         let db_password: Option<Cow<'static, str>> = check_var("DB_PASSWORD", &mut missing_vars)
             .map(|s: String| Cow::<'static, str>::Owned(s));
+        let jwt_secret: Option<Cow<'static, str>> = check_var("JWT_SECRET", &mut missing_vars)
+            .map(|s: String| Cow::<'static, str>::Owned(s));
+        let jwt_exp_seconds_str: Option<String> = check_var("JWT_EXP_SECONDS", &mut missing_vars);
         let redis_url: Option<Cow<'static, str>> = check_var("REDIS_URL", &mut missing_vars)
             .map(|s: String| Cow::<'static, str>::Owned(s));
 
@@ -117,6 +122,17 @@ impl EnvironmentVariables {
                 .map_err(|_| {
                     parse_errors.push(format!(
                         "DB_PORT (current: \"{}\", should be: numeric value between 1-65535)",
+                        s
+                    ));
+                })
+                .ok()
+        });
+
+        let jwt_exp_seconds: Option<u64> = jwt_exp_seconds_str.as_ref().and_then(|s: &String| {
+            s.parse::<u64>()
+                .map_err(|_| {
+                    parse_errors.push(format!(
+                        "JWT_EXP_SECONDS (current: \"{}\", should be: numeric value in seconds)",
                         s
                     ));
                 })
@@ -182,6 +198,10 @@ impl EnvironmentVariables {
             db_user.ok_or_else(|| anyhow::anyhow!("DB_USER missing after validation"))?;
         let db_password_value: Cow<'static, str> =
             db_password.ok_or_else(|| anyhow::anyhow!("DB_PASSWORD missing after validation"))?;
+        let jwt_secret_value: Cow<'static, str> =
+            jwt_secret.ok_or_else(|| anyhow::anyhow!("JWT_SECRET missing after validation"))?;
+        let jwt_exp_seconds_value: u64 = jwt_exp_seconds
+            .ok_or_else(|| anyhow::anyhow!("JWT_EXP_SECONDS missing after validation"))?;
         let redis_url_value: Cow<'static, str> =
             redis_url.ok_or_else(|| anyhow::anyhow!("REDIS_URL missing after validation"))?;
 
@@ -197,6 +217,8 @@ impl EnvironmentVariables {
             db_name: db_name_value,
             db_user: db_user_value,
             db_password: db_password_value,
+            jwt_secret: jwt_secret_value,
+            jwt_exp_seconds: jwt_exp_seconds_value,
             redis_url: redis_url_value,
         })
     }

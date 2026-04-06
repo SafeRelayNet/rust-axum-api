@@ -7,8 +7,8 @@ Simple authentication API built with Rust and Axum.
 This project provides a minimal backend to:
 - register users in PostgreSQL (`/auth/register`)
 - log in users by validating credentials in PostgreSQL (`/auth/login`)
-- log out users by deleting Redis sessions (`/auth/logout`)
-- store sessions in Redis with TTL
+- issue standard JWT tokens (`/auth/login`)
+- log out users by revoking JWT tokens in Redis (`/auth/logout`)
 
 ## Verified features
 
@@ -34,7 +34,8 @@ This project provides a minimal backend to:
 - Exposes JSON HTTP endpoints for register and login.
 - Hashes passwords with `bcrypt` before saving.
 - Validates credentials against the `users` table in PostgreSQL.
-- Generates a session token (UUID) and stores it in Redis.
+- Issues signed JWT tokens on successful login.
+- Stores JWT revocations in Redis for logout semantics.
 - Standardizes HTTP responses with a shared response wrapper.
 
 ## Architecture
@@ -85,13 +86,27 @@ Request body:
 }
 ```
 
+Successful response:
+
+```json
+{
+  "status": "OK",
+  "code": 200,
+  "data": {
+    "token": "<jwt-token>"
+  },
+  "messages": ["Login successful"],
+  "date": "2026-01-01T00:00:00+00:00"
+}
+```
+
 ### `POST /auth/logout`
 
 Request body:
 
 ```json
 {
-  "token": "UUID"
+  "token": "<jwt-token>"
 }
 ```
 
@@ -109,20 +124,6 @@ Successful response:
 }
 ```
 
-Successful response:
-
-```json
-{
-  "status": "OK",
-  "code": 200,
-  "data": {
-    "token": "UUID"
-  },
-  "messages": ["Login successful"],
-  "date": "2026-01-01T00:00:00+00:00"
-}
-```
-
 ## Data model (PostgreSQL)
 
 The project initializes the base schema at startup.
@@ -134,12 +135,15 @@ The project initializes the base schema at startup.
 - `created_at TIMESTAMPTZ`
 - `updated_at TIMESTAMPTZ` (with trigger)
 
-## Sessions (Redis)
+## JWT + Redis revocation
 
 On successful login:
-- key: `session:<token>`
-- value: JSON with `user_id` and `email`
-- TTL: 24 hours
+- the API returns a signed JWT (`HS256`)
+- token includes standard claims (`sub`, `iat`, `exp`, `jti`)
+
+On logout:
+- token is validated first
+- Redis stores a revocation key `revoked_jwt:<token>` with TTL until token expiry
 
 ## Required environment variables
 
@@ -155,6 +159,8 @@ DB_PORT=5433
 DB_NAME=rust_axum_api
 DB_USER=postgres
 DB_PASSWORD=postgres
+JWT_SECRET=change-me-with-a-long-random-secret
+JWT_EXP_SECONDS=86400
 REDIS_URL=redis://127.0.0.1:6379
 ```
 
@@ -181,6 +187,8 @@ DB_PORT=5433
 DB_NAME=rust_axum_api
 DB_USER=postgres
 DB_PASSWORD=postgres
+JWT_SECRET=change-me-with-a-long-random-secret
+JWT_EXP_SECONDS=86400
 REDIS_URL=redis://127.0.0.1:6379
 ```
 
@@ -268,7 +276,7 @@ curl -i -X POST http://127.0.0.1:3000/auth/register \
 
 Expected: HTTP `201`, JSON envelope with `data.user_id`.
 
-### Verify login flow + Redis session storage
+### Verify login flow (JWT issuance)
 
 ```bash
 curl -i -X POST http://127.0.0.1:3000/auth/login \
@@ -278,13 +286,25 @@ curl -i -X POST http://127.0.0.1:3000/auth/login \
 
 Expected: HTTP `200`, JSON envelope with `data.token`.
 
-Then verify key exists in Redis:
+### Verify logout flow + Redis revocation storage
+
+Use the JWT returned by login:
 
 ```bash
-redis-cli KEYS "session:*"
+curl -i -X POST http://127.0.0.1:3000/auth/logout \
+  -H "Content-Type: application/json" \
+  -d '{"token":"<jwt-token>"}'
 ```
 
-Expected: at least one `session:<token>` key.
+Expected: HTTP `200`, JSON envelope with `data.logout = true`.
+
+Then verify revocation key exists in Redis:
+
+```bash
+redis-cli KEYS "revoked_jwt:*"
+```
+
+Expected: at least one `revoked_jwt:<token>` key.
 
 ## Current scope
 

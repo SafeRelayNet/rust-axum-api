@@ -2,10 +2,10 @@ use async_trait::async_trait;
 use sqlx::Row;
 use uuid::Uuid;
 
-use crate::database::DatabaseService;
 use crate::domain::auth::UserAuth;
 use crate::domain::errors::DomainError;
 use crate::domain::ports::UserRepository;
+use crate::infrastructure::database::DatabaseService;
 
 #[derive(Clone)]
 pub struct PostgresAuthRepository {
@@ -20,11 +20,7 @@ impl PostgresAuthRepository {
 
 #[async_trait]
 impl UserRepository for PostgresAuthRepository {
-    async fn create_user(
-        &self,
-        email: &str,
-        password_hash: &str,
-    ) -> Result<Uuid, DomainError> {
+    async fn create_user(&self, email: &str, password_hash: &str) -> Result<Uuid, DomainError> {
         let email_owned: String = email.to_string();
         let password_hash_owned: String = password_hash.to_string();
 

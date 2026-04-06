@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Authenticated user identity used by application flows.
@@ -11,11 +12,17 @@ pub struct UserAuth {
     pub password_hash: String,
 }
 
-/// Session payload persisted in a session store.
-#[derive(Debug, Clone)]
-pub struct SessionData {
+/// Standard JWT claims used by the authentication flow.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthTokenClaims {
     /// Subject user identifier.
-    pub user_id: Uuid,
-    /// Email copy used by downstream session consumers.
+    pub sub: String,
+    /// User email claim.
     pub email: String,
+    /// Issued-at timestamp (unix seconds).
+    pub iat: u64,
+    /// Expiration timestamp (unix seconds).
+    pub exp: u64,
+    /// Token unique identifier.
+    pub jti: String,
 }

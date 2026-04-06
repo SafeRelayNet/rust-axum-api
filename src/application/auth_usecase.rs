@@ -3,32 +3,30 @@ use std::sync::Arc;
 use bcrypt::{hash, verify, DEFAULT_COST};
 use uuid::Uuid;
 
-use crate::domain::auth::SessionData;
 use crate::domain::errors::DomainError;
-use crate::domain::ports::{SessionStore, UserRepository};
+use crate::domain::ports::{TokenBlocklistStore, TokenService, UserRepository};
 
 #[derive(Clone)]
 pub struct AuthUseCase {
     user_repository: Arc<dyn UserRepository>,
-    session_store: Arc<dyn SessionStore>,
+    token_service: Arc<dyn TokenService>,
+    token_blocklist_store: Arc<dyn TokenBlocklistStore>,
 }
 
 impl AuthUseCase {
     pub fn new(
         user_repository: Arc<dyn UserRepository>,
-        session_store: Arc<dyn SessionStore>,
+        token_service: Arc<dyn TokenService>,
+        token_blocklist_store: Arc<dyn TokenBlocklistStore>,
     ) -> Self {
         Self {
             user_repository,
-            session_store,
+            token_service,
+            token_blocklist_store,
         }
     }
 
-    pub async fn register(
-        &self,
-        email: &str,
-        password: &str,
-    ) -> Result<Uuid, DomainError> {
+    pub async fn register(&self, email: &str, password: &str) -> Result<Uuid, DomainError> {
         let normalized_email: String = email.trim().to_lowercase();
 
         if normalized_email.is_empty() {
@@ -65,17 +63,9 @@ impl AuthUseCase {
             return Err(DomainError::Unauthorized("invalid credentials".to_string()));
         }
 
-        let token: String = Uuid::new_v4().to_string();
-        let session_data: SessionData = SessionData {
-            user_id: found_user.id,
-            email: found_user.email,
-        };
-
-        self.session_store
-            .store_session(&token, &session_data, 24 * 60 * 60)
-            .await?;
-
-        Ok(token)
+        self.token_service
+            .issue_token(found_user.id, &found_user.email)
+            .await
     }
 
     pub async fn logout(&self, token: &str) -> Result<(), DomainError> {
@@ -86,6 +76,37 @@ impl AuthUseCase {
             ));
         }
 
-        self.session_store.delete_session(&normalized_token).await
+        let claims: crate::domain::auth::AuthTokenClaims = self
+            .token_service
+            .validate_token(&normalized_token)
+            .await
+            .map_err(|_error: DomainError| {
+                DomainError::Validation("session token must be a valid JWT".to_string())
+            })?;
+
+        let is_revoked: bool = self
+            .token_blocklist_store
+            .is_token_revoked(&normalized_token)
+            .await?;
+        if is_revoked {
+            return Err(DomainError::NotFound("session not found".to_string()));
+        }
+
+        let now_seconds_i64: i64 = chrono::Utc::now().timestamp();
+        let now_seconds: u64 = if now_seconds_i64 < 0 {
+            0
+        } else {
+            now_seconds_i64 as u64
+        };
+        if claims.exp <= now_seconds {
+            return Err(DomainError::Unauthorized("token has expired".to_string()));
+        }
+
+        let remaining_ttl_seconds: u64 = claims.exp.saturating_sub(now_seconds);
+        self.token_blocklist_store
+            .revoke_token(&normalized_token, remaining_ttl_seconds)
+            .await?;
+
+        Ok(())
     }
 }

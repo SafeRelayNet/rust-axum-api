@@ -22,9 +22,10 @@ axum = "0.8.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 validator = { version = "0.19.0", features = ["derive"] }
+jsonwebtoken = "9.3.0"
 
 # * Tower layers for timeout and middleware composition
-tower = { version = "0.5.2", features = ["timeout"] }
+tower = { version = "0.5.2", features = ["timeout", "util"] }
 
 # * Body size limit error typing used by global error mapper
 http-body-util = "0.1.3"

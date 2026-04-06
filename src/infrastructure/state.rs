@@ -4,9 +4,10 @@ use anyhow::Result;
 
 use crate::application::auth_usecase::AuthUseCase;
 use crate::config::environment::EnvironmentVariables;
-use crate::database::{DatabaseService, RedisService};
 use crate::infrastructure::cache::redis_session_store::RedisSessionStore;
+use crate::infrastructure::database::{DatabaseService, RedisService};
 use crate::infrastructure::persistence::postgres_auth_repository::PostgresAuthRepository;
+use crate::infrastructure::security::jwt_token_service::JwtTokenService;
 
 /// Central dependency container used by the web layer.
 ///
@@ -45,10 +46,18 @@ impl AppState {
         let auth_repository: Arc<PostgresAuthRepository> =
             Arc::new(PostgresAuthRepository::new(database.clone()));
 
-        let session_store: Arc<RedisSessionStore> = Arc::new(RedisSessionStore::new(redis.clone()));
+        let token_blocklist_store: Arc<RedisSessionStore> =
+            Arc::new(RedisSessionStore::new(redis.clone()));
+        let token_service: Arc<JwtTokenService> = Arc::new(JwtTokenService::new(
+            environment_arc.jwt_secret.to_string(),
+            environment_arc.jwt_exp_seconds,
+        ));
 
-        let auth_usecase: Arc<AuthUseCase> =
-            Arc::new(AuthUseCase::new(auth_repository, session_store));
+        let auth_usecase: Arc<AuthUseCase> = Arc::new(AuthUseCase::new(
+            auth_repository,
+            token_service,
+            token_blocklist_store,
+        ));
 
         Ok(Self {
             environment: environment_arc,

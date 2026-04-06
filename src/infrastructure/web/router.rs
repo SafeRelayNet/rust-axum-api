@@ -6,8 +6,8 @@ use axum::Router;
 use listenfd::ListenFd;
 use tokio::net::TcpListener;
 use tokio::signal;
-use tower::ServiceBuilder;
 use tower::timeout::TimeoutLayer;
+use tower::ServiceBuilder;
 
 use crate::infrastructure::state::AppState;
 use crate::infrastructure::web::auth;
